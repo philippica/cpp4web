@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Textarea Example</title>
+</head>
+<body>
+    <form id="myForm">
+        <textarea id="myTextarea" rows="4" cols="50"></textarea>
+        <button type="button" onclick="getContent()">Get Content</button>
+    </form>
+
+    <script>
+        function getContent() {
+            const textareaContent = document.getElementById("myTextarea").value;
+            alert("Textarea content: " + textareaContent);
+        }
+    </script>
+</body>
+</html>

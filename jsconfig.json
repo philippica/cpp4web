@@ -1,0 +1,15 @@
+{
+    "compilerOptions": {
+      "baseUrl": ".",
+      "paths": {
+        "runtime": ["src/Fundamental/RuntimeType.product.js"],
+      },
+      "moduleResolution": "node",
+      "checkJs": true,
+      "target": "ESNext",
+      "module": "ESNext",
+      "strictNullChecks": true,
+      "resolveJsonModule": true
+    },
+    "exclude": ["node_modules", "docs", "thinking"]
+  }

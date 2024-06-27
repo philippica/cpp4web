@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Textarea Example</title>
+</head>
+<body>
+    <form id="myForm">
+        <textarea id="myTextarea" rows="30" cols="50">
+int fun
+(int a, int b, int c)
+{
+    a+1+10;
+    for(int i = 1; i <= 10; i=i+1) {
+        a+=1;
+    }
+}
+int c = 123, d = 10;
+int main()
+{int a=5, b=(4*3), c, d[10][20][10];a+1*b; (4+3)*(-3+1); d[10] +1;}
+        </textarea>
+        <button type="button" onclick="getContent()">Run</button>
+    </form>
+    <pre id="output"></pre>
+    <script src="./index.js"> </script>
+    <script>
+
+// parseLValue 是primary
+
+
+
+        function getContent() {
+            const textareaContent = document.getElementById("myTextarea").value;
+            const stream = Cpp4Web.Tokenizer(textareaContent);
+            try {
+                const result = Cpp4Web.Parse(stream, 0);
+                console.info(result);
+                /*
+                const runtime = new Cpp4Web.Runtime(result);
+                const {output} = runtime.launch();
+                console.info(output);
+                document.getElementById("output").innerHTML = output;
+                */
+            } catch(e) {
+                console.info(e);
+            }
+        }
+        getContent();
+
+
+
+
+
+
+
+    </script>
+</body>
+</html>
