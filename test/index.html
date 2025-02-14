@@ -245,7 +245,7 @@ async function Test(code, expect) {
         AST = Cpp4Web.Parse(stream);
         const runtime = new Cpp4Web.Runtime(AST);
         const {output} = await runtime.launch("",{
-            debug: true,
+            debug: false,
             debugCallback: (msg) => {
                 console.info(msg);
                 console.info(msg.currentNode.lineNum);
@@ -284,7 +284,7 @@ async function Test(code, expect) {
 }
 
 const runTests = async() =>{
-    for(let i = tests.length-1; i < tests.length; i++) {
+    for(let i = 0; i < tests.length; i++) {
         const test = tests[i];
         const result = await Test(test.code, test.expect);
         const outputDiv = document.getElementById("output");
