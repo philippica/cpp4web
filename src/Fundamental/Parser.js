@@ -62,11 +62,12 @@ class Parser {
     }
 
     /**
-     * @param {AST} ast 
+     * @param {mAST} ast 
      * @returns {Parser}
      */
     setAST(ast) {
         this.ast = ast;
+        if(ast && !ast.lineNum)ast.lineNum = this.currentLine;
         return this;
     }
 
@@ -261,6 +262,7 @@ class Parser {
     checkSign = (signs) => this.checkToken(TokenType.sign, signs);
 
     get currentLine() {
+        if(this.parserIndex >= this.#stream.length)return -1;
         return this.#stream[this.parserIndex].line;
     }
 

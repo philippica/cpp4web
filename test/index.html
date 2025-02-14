@@ -185,17 +185,88 @@ int main(){
     `27`
 },
 
+{
+    title: "two pointers",
+    code: 
+    `
+#include <cstdio>
+int paint[20], bucket[20];
+int main()
+{
+	int n, m;
+	n=12;m=5;
+	paint[1] = 2;
+	paint[2] = 5;
+	paint[3] = 3;
+	paint[4] = 1;
+	paint[5] = 3;
+	paint[6] = 2;
+	paint[7] = 4;
+	paint[8] = 1;
+	paint[9] = 1;
+	paint[10] = 5;
+	paint[11] = 4;
+	paint[12] = 3;
+
+	
+	int red = 1, countOfPaint = 0;
+	int minLength = n, ansL = 1, ansR = n; // 23
+	for(int blue = 1; blue <= n; blue++) {
+		bucket[paint[blue]]++;
+		if(bucket[paint[blue]] == 1) countOfPaint++;
+		while(countOfPaint == m) {
+			if(blue - red + 1 < minLength) {
+				minLength = blue - red + 1;
+				ansL = red; 
+				ansR = blue;
+			}
+			bucket[paint[red]]--;
+			if(bucket[paint[red]] == 0) countOfPaint--;
+			red++;
+		}
+	}
+	printf("%d %d", ansL, ansR);
+	return 0;
+
+}
+    `,
+    expect:
+    `2 7`
+},
+
 ];
 
 //tests = [tests[5]];
 
-function Test(code, expect) {
+async function Test(code, expect) {
     const stream = Cpp4Web.Tokenizer(code);
     let AST;
     try {
         AST = Cpp4Web.Parse(stream);
         const runtime = new Cpp4Web.Runtime(AST);
-        const {output} = runtime.launch();
+        const {output} = await runtime.launch("",{
+            debug: true,
+            debugCallback: (msg) => {
+                console.info(msg);
+                console.info(msg.currentNode.lineNum);
+                if(msg.currentNode.lineNum < 23) {
+                    return;
+                }
+                return new Promise((resolve) => {
+                    const onKeyDown = (event) => {
+                        if (event.key === 'F9') {
+                            document.removeEventListener('keydown', onKeyDown);
+                            resolve();
+                        }
+                        if (event.key === 'F8') {
+                            document.removeEventListener('keydown', onKeyDown);
+                            resolve();
+                        }
+                    };
+                    document.addEventListener('keydown', onKeyDown);
+                });
+            }
+        });
         if(output == expect) {
             return 1;
         } else {
@@ -212,18 +283,21 @@ function Test(code, expect) {
     }
 }
 
-
-for(let i = 0; i < tests.length; i++) {
-    const test = tests[i];
-    const result = Test(test.code, test.expect);
-    const outputDiv = document.getElementById("output");
-    if(result == 1) {
-        outputDiv.innerHTML += `${i}: Test "${test.title}":  <b style="color: #4dde4d;">OK</b>\n\n`;
-    } else {
-        outputDiv.innerHTML += `${i}: Test "${test.title}": <b style="color: #de4d4d;">Incorrect</b>\noutput: ${result?.output}\n\nexpect: ${test.expect}\n\n<pre>${test.code}</pre>`;
+const runTests = async() =>{
+    for(let i = tests.length-1; i < tests.length; i++) {
+        const test = tests[i];
+        const result = await Test(test.code, test.expect);
+        const outputDiv = document.getElementById("output");
+        if(result == 1) {
+            outputDiv.innerHTML += `${i}: Test "${test.title}":  <b style="color: #4dde4d;">OK</b>\n\n`;
+        } else {
+            outputDiv.innerHTML += `${i}: Test "${test.title}": <b style="color: #de4d4d;">Incorrect</b>\noutput: ${result?.output}\n\nexpect: ${test.expect}\n\n<pre>${test.code}</pre>`;
+        }
+        outputDiv.innerHTML += '<hr>';
     }
-    outputDiv.innerHTML += '<hr>';
 }
+
+runTests();
     </script>
 </body>
 </html>

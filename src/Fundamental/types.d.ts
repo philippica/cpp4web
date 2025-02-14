@@ -221,3 +221,7 @@ type AST = BinaryOpAST
          | PostfixAST
          | ArrayDeclearationAST
          | ArrayAST
+
+type mAST = AST & {
+    lineNum?: number;
+};

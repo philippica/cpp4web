@@ -143,7 +143,7 @@ const parseInvoke = (parser) => {
     parser.setAST({
         type: tokenType === TokenType.buildin ? RuntimeType.buildin:RuntimeType.invoke,
         functionName,
-        argus
+        argus,
     });
     return parser;
 }
@@ -259,17 +259,17 @@ const parsePostfixExpression = (parser) => {
     return parser.thenParse(parsePrimaryExpression)
                  .getAST(primaryObj)
                  .thenParse((_parser) => {
-                     const primaryExp = primaryObj.ast;
+                     let primaryExp = primaryObj.ast;
                      if(primaryExp.type === RuntimeType.variable) {
                          const type = primaryExp.T;
-                         parser.thenParse(parsePostfix(type, primaryExp))
+                         parser.thenParse(parsePostfix(type, primaryExp)).getAST(primaryExp);
                      }
 
                      if(parser.attempt((_parser) =>  _parser.parseSign(['++', '--']))) {
                          parser.setAST({
                              type: RuntimeType.postfix,
                              sign: parser.ast.content,
-                             content: primaryExp,
+                             content: primaryExp.ast,
                          });
                      }
                      return _parser;
@@ -501,6 +501,7 @@ const parseFor = (parser) => {
     const condition = {};
     const increment = {};
     const body = {};
+    const lineNum = parser.currentToken.line;
     return parser.parseKeywords(['for'])
           .jumpSign(['('])
           .choose([
@@ -520,6 +521,7 @@ const parseFor = (parser) => {
             condition: condition.ast,
             increment: increment.ast,
             body:body.ast,
+            lineNum
           });
 
 }
@@ -531,6 +533,7 @@ const parseFor = (parser) => {
 const parseWhile = (parser) => {
     const condition = {};
     const body = {};
+    const lineNum = parser.currentToken.line;
     return parser.parseKeywords(['while'])
           .jumpSign(['('])
           .thenParse(expression).getAST(condition)
@@ -543,6 +546,7 @@ const parseWhile = (parser) => {
             type: RuntimeType.whileStmt,
             condition: condition.ast,
             body:body.ast,
+            lineNum
           });
 }
 
@@ -573,6 +577,7 @@ const parseIf = (parser) => {
     const body = {};
     const elif = {};
     const elses = {};
+    const lineNum = parser.currentToken.line;
     return parser.parseKeywords(['if'])
                  .jumpSign(['(']).thenParse(expression).jumpSign([')']).getAST(condition)
                  .choose([
@@ -601,7 +606,8 @@ const parseIf = (parser) => {
                     condition: condition.ast,
                     body: body.ast,
                     elif: elif.ast,
-                    elses: elses.ast[0]
+                    elses: elses.ast[0],
+                    lineNum
                  });
 }
 
@@ -609,13 +615,13 @@ const parseIf = (parser) => {
  * @param {Parser} parser 
  * @returns {Parser}
  */
-const parseBreak = (parser) => parser.parseKeywords(['break']).jumpSemicolon().setAST({type: RuntimeType.breakStmt});
+const parseBreak = (parser) => parser.parseKeywords(['break']).setAST({type: RuntimeType.breakStmt}).jumpSemicolon();
 
 /**
  * @param {Parser} parser 
  * @returns {Parser}
  */
-const parseContinue = (parser) => parser.parseKeywords(['continue']).jumpSemicolon().setAST({type: RuntimeType.continueStmt});
+const parseContinue = (parser) => parser.parseKeywords(['continue']).setAST({type: RuntimeType.continueStmt}).jumpSemicolon();
 
 
 /**
@@ -626,11 +632,11 @@ const parseReturn = (parser) => {
     const exp = emptyAST();;
     return parser.parseKeywords(['return'])
                  .thenParse(expression).getAST(exp)
-                 .jumpSemicolon()
                  .setAST({
                     type: RuntimeType.returnStmt,
                     content: exp.ast,
-                 });
+                 })
+                 .jumpSemicolon();
 }
 
 /**
@@ -655,7 +661,9 @@ const singleStatement = (parser) => parser.choose([
  */
 const parseBlock = (parser) => {
     parser.stack.push('{');
+    const lineNum = parser.currentToken.line;
     const seq = parser.jumpSign(['{']).sequence(singleStatement).jumpSign(['}']).ast;
+    seq.lineNum = lineNum;
 
     while(parser.stack[parser.stack.length-1] != '{') {
         parser.variables.delete(parser.stack[parser.stack.length-1]);
