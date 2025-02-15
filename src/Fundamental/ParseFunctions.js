@@ -242,6 +242,19 @@ const parsePostfix = (type, variable) => (parser) => {
         });
     } else if(type.type === 'struct') {
         console.info(type);
+        const typeName = type.name;
+        const T = parser.structs.get("T").content.ast;
+        if(parser.currentToken.content == '.') {
+            const primaryObj = emptyAST();
+            // @ts-ignore
+            parser.jumpSign(['.']).parseIdentify([]).getAST(primaryObj).setAST({
+                type: RuntimeType.postfix,
+                sign: {type: "struct", record: primaryObj.ast.content},
+                content: variable
+            });
+        }
+
+
     } else
         parser.setAST(variable);
     return parser;
@@ -432,14 +445,15 @@ const expressionStatement = (parser) => parser.thenParse(expression).jumpSemicol
  * @returns {Parser}
  */
 const parseStructType = (parser) => {
-    if(!parser.getStructOrUnion(parser.currentToken.content)) {
+    const typeName = parser.currentToken.content;
+    if(!parser.structs.has(typeName)) {
         return parser.setError("not struct");
     }
     return parser.parseIdentify([]).setAST({
         type: RuntimeType.type,
         T: {
             type: RuntimeType.struct,
-            name: parser.currentToken.content,
+            name: typeName,
         }
     });
 }
@@ -462,7 +476,6 @@ const parseType = (parser) => {
  * @returns {Parser}
  */
 const parseDeclearation = (parser) => {
-    const typeObj = emptyAST();
     const type = parser.thenParse(parseType).ast?.T;
     const seqObj = emptyAST();
     return parser.sequence((_parser) => {
@@ -726,24 +739,51 @@ const parseFunction = (parser) => {
  * @param {Parser} parser 
  * @returns {Parser}
  */
+const parseStruct = (parser) => {
+    const Type = emptyAST();
+    const content = emptyAST();
+    const struct = parser.parseKeywords(['struct', 'class'])
+                         .parseIdentify([]).getAST(Type)
+                         .jumpSign(['{'])
+                         .sequence((_parser) => _parser.thenParse(parseDeclearation).jumpSemicolon())
+                         .jumpSign(['}'])
+                         .jumpSemicolon()
+                         .getAST(content)
+                         .setAST({
+                            type: RuntimeType.struct,
+                            name: Type.ast.content,
+                            content: content.ast
+                         });
+    
+    parser.structs.set(Type.ast.content, parser.ast);
+    
+    return struct;
+}
+
+/**
+ * @param {Parser} parser 
+ * @returns {Parser}
+ */
 const parseProgram = (parser) => {
     const globals = [];
+    const structs = new Map();
     const functions = new Map();
     return parser.sequence((_) => _.choose([
             [null, (_parser) => parseDeclearation(_parser).jumpSemicolon(), (_parser)=> {globals.push(_parser.ast);} ],
             [null, parseFunction, (_parser)=> {functions.set(_parser.ast.functionName, _parser.ast);} ],
+            [['struct', 'class'], parseStruct, (_parser)=> {structs.set(_parser.ast.name, _parser.ast);} ],
         ])
     ).thenParse((_parser) => {
         if(!_parser.empty()) {
             _parser.setError(_parser.meta.attemptErrorMessage);
         }
-        return _parser
+        return _parser;
     }).setAST({
         type: RuntimeType.program,
-        globals: globals,
-        functions: functions,
+        globals,
+        functions,
         main: parser.functions.get('main'),
-        structs: null
+        structs
     });
 }
 

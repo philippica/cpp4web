@@ -32,7 +32,7 @@ enum RuntimeType {
     invoke,
     whileStmt,
     number,
-    Empty,
+    empty,
     type,
     POD,
     struct,
@@ -142,6 +142,12 @@ type ProgramAST = {
     structs: Array;
 }
 
+type Struct = {
+    type: RuntimeType.struct;
+    content: Array;
+    name: string;
+}
+
 type TernaryAST = {
     type: RuntimeType.ternaryOp;
     sign: string;
@@ -177,6 +183,8 @@ type ArrayAST = {
     parserIndex: string,
     inner: AST,
 };
+
+
 
 
 type EmptyAST = {
@@ -221,6 +229,7 @@ type AST = BinaryOpAST
          | PostfixAST
          | ArrayDeclearationAST
          | ArrayAST
+         | Struct
 
 type mAST = AST & {
     lineNum?: number;

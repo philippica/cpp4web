@@ -16,6 +16,26 @@ let tests = [
     code: 
     `
 #include <cstdio>
+struct T {
+    int x;
+    int y;
+};
+int main(){
+    T a;
+    a.x = 1;
+    a.y = a.x;
+    printf("%d", a.y);
+    return 0;
+}
+    `,
+    expect:
+    `1`
+},
+{
+    title: "array",
+    code: 
+    `
+#include <cstdio>
 int main(){
     int a[20];
     a[10] = 1;
@@ -285,6 +305,7 @@ async function Test(code, expect) {
 
 const runTests = async() =>{
     for(let i = 0; i < tests.length; i++) {
+    //for(let i = 0; i < 1; i++) {
         const test = tests[i];
         const result = await Test(test.code, test.expect);
         const outputDiv = document.getElementById("output");

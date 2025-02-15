@@ -23,6 +23,7 @@ class Parser {
         this.variables = new Map();
         this.stack = [];
         this.functions = new Map();
+        this.structs = new Map();
     }
 
     /**
@@ -95,6 +96,7 @@ class Parser {
         const parser = new Parser(this.#stream, this.parserIndex);
         parser.variables = this.variables;
         parser.functions = this.functions;
+        parser.structs = this.structs;
         parser.stack = this.stack;
         return parser;
     }

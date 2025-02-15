@@ -32,17 +32,25 @@ class Runtime {
     async setValue(exp1, exp2) {
         let varibleName = exp1.content;
         if(exp1.type === RuntimeType.postfix) {
+
+
             varibleName = varibleName.content;
             const varibaleRaw = this.symbolTable.get(varibleName);
             let variable = varibaleRaw;
             
             let postfix = exp1.sign;
-            while(postfix.inner !== null) {
+
+            while(postfix.inner) {
                 const index = (await this.excute(postfix.parserIndex)).result;
                 variable = variable[index];
                 postfix = postfix.inner;
             }
-            const index = (await this.excute(postfix.parserIndex)).result;
+            let index;
+            if(postfix.type == 'struct') {
+                index = postfix.record;
+            } else {
+                index = (await this.excute(postfix.parserIndex)).result;
+            }
             variable[index] = exp2;
         } else {
             this.symbolTable.set(varibleName, exp2);
@@ -272,6 +280,14 @@ class Runtime {
             return ret;
         } else if(type.type == RuntimeType.POD) {
             return 0;
+        } else if(type?.type == 'struct') {
+            const struct = this.structs.get(type.name).content;
+            console.info(struct);
+            const res = {};
+            for(let i = 0; i < struct.length; i++) {
+                res[struct[i].content[0][0].content] = 0;
+            }
+            return res;
         }
     }
 
@@ -289,6 +305,19 @@ class Runtime {
             value = value[index];
             arr = arr.inner;
         }
+        return {result: value, state: {controllState: ControllType.normal}};
+    }
+
+    /**
+     * @param {PostfixAST} currentNode 
+     * @returns 
+     */
+    async excuteStruct(currentNode) {
+        const varibleName = currentNode.content.content;
+        let record = currentNode.sign.record;
+        const variable = this.symbolTable.get(varibleName);
+        let value = variable[record];
+
         return {result: value, state: {controllState: ControllType.normal}};
     }
 
@@ -430,6 +459,8 @@ class Runtime {
                         this.setValue(currentNode.content, content.result-1);
                         //this.symbolTable.set(currentNode.content.content, content.result-1);
                         return {result: content.result, state: content.state};
+                    } else if(currentNode.sign.type == 'struct') {
+                        return this.excuteStruct(currentNode);
                     } else {
                         return this.excuteArray(currentNode);
                     }
