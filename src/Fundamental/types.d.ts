@@ -40,6 +40,7 @@ enum RuntimeType {
     ifStmt,
     postfix,
     lValue,
+    arrayVariable
 };
 
 
@@ -202,6 +203,11 @@ type LValueAST = {
     content: AST
 }
 
+type ArrayVariableAST = {
+    type: RuntimeType.arrayVariable;
+    content: AST;
+}
+
 
 
 
@@ -230,6 +236,7 @@ type AST = BinaryOpAST
          | ArrayDeclearationAST
          | ArrayAST
          | Struct
+         | ArrayVariableAST;
 
 type mAST = AST & {
     lineNum?: number;

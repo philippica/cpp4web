@@ -29,13 +29,14 @@ class Runtime {
         this.globalVariables = new Map();
     }
 
-    async setValue(exp1, exp2) {
+    async setValue(exp1, exp2, st) {
         let varibleName = exp1.content;
+        const symbolTable = st || this.symbolTable;
         if(exp1.type === RuntimeType.postfix) {
 
 
             varibleName = varibleName.content;
-            const varibaleRaw = this.symbolTable.get(varibleName);
+            const varibaleRaw = symbolTable.get(varibleName);
             let variable = varibaleRaw;
             
             let postfix = exp1.sign;
@@ -53,11 +54,14 @@ class Runtime {
             }
             variable[index] = exp2;
         } else {
-            this.symbolTable.set(varibleName, exp2);
+            if(symbolTable.has(varibleName))
+                symbolTable.set(varibleName, exp2);
+            else
+                this.globalVariables.set(varibleName, exp2);
         }
     }
 
-    binaryOp(exp1, exp2, sign) {
+    async binaryOp(exp1, exp2, sign) {
         switch(sign) {
             case '+':
                 return exp1.result+exp2.result;
@@ -92,10 +96,17 @@ class Runtime {
             case '>=':
                 return exp1.result>=exp2.result?1:0;
             case '=':
-                this.setValue(exp1.result, exp2.result);
+                await this.setValue(exp1.result, exp2.result);
                 return exp2.result;
             case '==':
                 return exp1.result==exp2.result?1:0;
+            default:
+                if (sign.endsWith('=')) {
+                    const op = sign.substring(0, sign.length - 1);
+                    const newExp2 = await this.excute({type: RuntimeType.binaryOp, content: [exp1.result, {type: RuntimeType.number, content: exp2.result}], sign: op});
+                    await this.setValue(exp1.result, newExp2.result);
+                    return exp2.result;
+                }
         }
     }
 
@@ -132,8 +143,8 @@ class Runtime {
      * @returns 
      */
     async excuteVariable(currentNode) {
-        let variable = this.globalVariables.get(currentNode.content);
-        variable = this.symbolTable.get(currentNode.content);
+        let variable = this.symbolTable.get(currentNode.content);
+        if(variable===undefined)variable = this.globalVariables.get(currentNode.content);
         return {result: variable, state: {controllState: ControllType.normal}};
     }
 
@@ -152,6 +163,17 @@ class Runtime {
                 break;
             case '@arguments':
                 return {result: this.symbolTable.get('@arguments')}
+
+            case '@input':
+                const {result: argus} = await this.excute(node.argus[0]);
+
+                for(let i = 1; i < argus.length; i++) {
+                    const arg = argus[i];
+                    const input = this.input?.shift();
+                    //arg?.mp?.set(arg.content, parseInt(input));
+                    this.setValue(arg.variable, parseInt(input), arg.mp);
+                }
+                return {result: 1, state: {controllState: ControllType.normal}}
             case '@outputWithFormat':
                 {
                     const {result: argus} = await this.excute(node.argus[0]);
@@ -274,8 +296,9 @@ class Runtime {
         if(type.type == RuntimeType.arrayDeclearation) {
             const length = (await this.excute(type.parserIndex)).result;
             const ret = [];
+            const inner = await this.getType(type.inner);
             for(let i = 0; i < length; i++) {
-                ret.push(await this.getType(type.inner));
+                ret.push(inner === 0 ? 0:await this.getType(type.inner));
             }
             return ret;
         } else if(type.type == RuntimeType.POD) {
@@ -296,14 +319,18 @@ class Runtime {
      * @returns 
      */
     async excuteArray(currentNode) {
-        const varibleName = currentNode.content.content;
         let arr = currentNode.sign;
-        const variable = this.symbolTable.get(varibleName);
-        let value = variable;
-        while(arr) {
+        let variable = await this.excute(currentNode.content);
+        //if(!variable) variable = this.globalVariables.get(varibleName);
+        let value = variable.result;
+        while(arr && arr.type == "array") {
             const index = (await this.excute(arr.parserIndex)).result;
             value = value[index];
             arr = arr.inner;
+        }
+        if(arr?.type == 'struct') {
+            const index = arr.record;
+            value = value[index];
         }
         return {result: value, state: {controllState: ControllType.normal}};
     }
@@ -375,16 +402,16 @@ class Runtime {
             case RuntimeType.continueStmt:
                 return {result : null, state: {controllState: ControllType.continueState}};
             case RuntimeType.blocks:
-                return this.excuteBlock(currentNode);
+                return await this.excuteBlock(currentNode);
             case RuntimeType.arrayDeclearation:
-                return this.excuteBlock(currentNode);
+                return await this.excuteBlock(currentNode);
             case RuntimeType.array:
                 return this.excuteArray(currentNode);
             case RuntimeType.binaryOp:
                 {
                     const exp1 = await this.excute(currentNode.content[0]);
                     const exp2 = await this.excute(currentNode.content[1]);
-                    const result = this.binaryOp(exp1, exp2, currentNode.sign);
+                    const result = await this.binaryOp(exp1, exp2, currentNode.sign);
                     return {result, state: {controllState: ControllType.normal}};
                 }
             case RuntimeType.number:
@@ -446,17 +473,17 @@ class Runtime {
                     return {result: currResult, state: currState};
                 }
             case RuntimeType.forStmt:
-                return this.excuteFor(currentNode);
+                return await this.excuteFor(currentNode);
             case RuntimeType.postfix: 
                 {
                     if(currentNode.sign == '++') {
                         const content = await this.excute(currentNode.content);
-                        this.setValue(currentNode.content, content.result+1);
+                        await this.setValue(currentNode.content, content.result+1);
                         //this.symbolTable.set(currentNode.content.content, content.result+1);
                         return {result: content.result, state: content.state};
                     } else if(currentNode.sign == '--') {
                         const content = await this.excute(currentNode.content);
-                        this.setValue(currentNode.content, content.result-1);
+                        await this.setValue(currentNode.content, content.result-1);
                         //this.symbolTable.set(currentNode.content.content, content.result-1);
                         return {result: content.result, state: content.state};
                     } else if(currentNode.sign.type == 'struct') {
@@ -485,6 +512,24 @@ class Runtime {
                         const content = await this.excute(currentNode.content);
                         return {result: content.result, state: content.state};
                     }
+                    if(currentNode.sign == '&') {
+                        const content = currentNode.content;
+                        return {result: {
+                            mp: this.symbolTable,
+                            content: content.content,
+                            variable: content
+                        }, state: {controllState: ControllType.normal}};
+                    }
+                }
+            case RuntimeType.arrayVariable:
+                {
+                    const content = currentNode.content;
+                    let arr = [];
+                    for(const index of content) {
+                        const {result} = await this.excute(index);
+                        arr.push(result);
+                    }
+                    return {result: arr, state: content.state};
                 }
             case RuntimeType.ternaryOp:
                 {
@@ -511,7 +556,7 @@ class Runtime {
      * @returns 
      */
     async excute(currentNode, argus) {
-        return this.excuteHelper(currentNode, argus);
+        return await this.excuteHelper(currentNode, argus);
     }
 
 
@@ -524,7 +569,7 @@ class Runtime {
     async launch(input, config) {
         if(!config)this.config = {};
         this.config = config;
-        this.input = input;
+        this.input = input?.split(/[\n\s]/);
         this.currentLine = 0;
         await this.excuteProgram(this.AST);
         return {output: this.output.replaceAll('\\n', '\n')};

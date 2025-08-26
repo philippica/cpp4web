@@ -191,7 +191,7 @@ const parseArrayDeclearation2 = (innerType) => (parser) => {
  * @param {Object} innerType 
  * @returns {ParserFunction}
  */
-const parseArray2 = (innerType) => (parser) => {
+const parseArray2 = (innerType, variable) => (parser) => {
 
     const index = emptyAST();
     const inner = emptyAST();
@@ -203,22 +203,20 @@ const parseArray2 = (innerType) => (parser) => {
                                     .jumpSign(['['])
                                     .thenParse(expression).getAST(index)
                                     .jumpSign([']'])
-                                    .thenParse(parseArray2(innerType)).getAST(inner)
+                                    .thenParse(parseArray2(innerType, variable)).getAST(inner)
                                     .setAST({
                                       type: RuntimeType.array,
                                       inner: inner.ast,
                                       parserIndex: index.ast
                                     })
         ],
-        [['.'], (_parser) => _parser.thenParse((_parser)=>{return _parser;})
-                                    .jumpSign(['['])
-                                    .thenParse(expression).getAST(index)
-                                    .jumpSign([']'])
-                                    .thenParse(parseArray2(innerType)).getAST(inner)
+        [['.'], (_parser) => _parser.jumpSign(['.'])
+                                    .parseIdentify([]).getAST(index)
+                                    // @ts-ignore
                                     .setAST({
-                                      type: RuntimeType.array,
-                                      inner: inner.ast,
-                                      parserIndex: index.ast
+                                        type: RuntimeType.struct,
+                                        record: index.ast.content,
+                                        content: variable
                                     })
         ],
         // @ts-ignore
@@ -235,7 +233,7 @@ const parseArray2 = (innerType) => (parser) => {
 const parsePostfix = (type, variable) => (parser) => {
     if(type.type === RuntimeType.arrayDeclearation) {
         const primaryObj = emptyAST();
-        parser.thenParse(parseArray2(type)).getAST(primaryObj).setAST({
+        parser.thenParse(parseArray2(type, variable)).getAST(primaryObj).setAST({
             type: RuntimeType.postfix,
             sign: primaryObj.ast,
             content: variable
@@ -266,8 +264,6 @@ const parsePostfix = (type, variable) => (parser) => {
  * @returns {Parser}
  */
 const parsePostfixExpression = (parser) => {
-
-
     const primaryObj = emptyAST();
     return parser.thenParse(parsePrimaryExpression)
                  .getAST(primaryObj)
@@ -367,6 +363,37 @@ const parseLogicalAnd = (parser) => parser.thenParse(parseBinaryOperations(['&&'
  * @returns {Parser}
  */
 const parseLogicalOr = (parser) => parser.thenParse(parseBinaryOperations(['||'], parseLogicalAnd));
+
+/**
+ * @param {Parser} parser 
+ * @returns {Parser}
+ */
+const parseArrayContent = (parser) => {
+    const inner = emptyAST();
+    return parser.jumpSign(['{'])
+        .sequence((_parser) => {
+            _parser.thenParse(parseConditionalExpression);
+            if(_parser.checkSign([',']))_parser.jumpSign([',']);
+            return _parser;
+        })
+        .getAST(inner)
+        .jumpSign(['}'])
+        .setAST({
+            type: RuntimeType.arrayVariable,
+            content: inner.ast
+        });
+}
+
+/**
+ * @param {Parser} parser 
+ * @returns {Parser}
+ */
+const parseVariableContent = (parser) => {
+    return parser.choose([
+        [['{'], parseArrayContent],
+        [null, parseConditionalExpression],
+    ]);
+}
 
 /**
  * @param {Parser} parser 
@@ -482,7 +509,9 @@ const parseDeclearation = (parser) => {
         let variable = _parser.parseIdentify([]).ast;
         const currentType = _parser.thenParse(parseArrayDeclearation2(type)).ast;
         let value = null;
-        if(_parser.checkSign(['=']))value = _parser.jumpSign(['=']).thenParse(parseConditionalExpression).ast;
+        if(_parser.checkSign(['='])) { // todo
+            value = _parser.jumpSign(['=']).thenParse(parseVariableContent).ast;
+        }
         if(_parser.checkSign([',']))_parser.jumpSign([',']);
         // @ts-ignore
         _parser.setAST([variable, value, currentType]);

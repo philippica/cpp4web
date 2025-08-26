@@ -53,3 +53,6 @@ export const ifStmt = 24;
 export const postfix = 25;
 /** @type {RuntimeType.lValue} */
 export const lValue = 26;
+
+/** @type {RuntimeType.arrayVariable} */
+export const arrayVariable = 27;
