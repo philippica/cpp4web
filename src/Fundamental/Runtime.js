@@ -2,11 +2,28 @@ import { ControllType } from "./Constant";
 
 import * as RuntimeType from 'runtime';
 
+class Pointer {
+    constructor(content) {
+        if (content instanceof Pointer) {
+            this.content = content.content;
+        } else {
+            this.content = content;
+        }
+    }
+    get() {
+        return this.content;
+    }
+    set(value) {
+        this.content = value;
+    }
+}
+
+
 const createArray = (sizes, curr, defaultValue) => {
     const ret = [];
     if(curr + 1 == sizes.length) {
         for(let i = 0; i < sizes[curr]; i++) {
-            ret.push(defaultValue);
+            ret.push(new Pointer(defaultValue));
         }
         return ret;
     }
@@ -29,83 +46,61 @@ class Runtime {
         this.globalVariables = new Map();
     }
 
-    async setValue(exp1, exp2, st) {
-        let varibleName = exp1.content;
-        const symbolTable = st || this.symbolTable;
-        if(exp1.type === RuntimeType.postfix) {
-
-
-            varibleName = varibleName.content;
-            const varibaleRaw = symbolTable.get(varibleName);
-            let variable = varibaleRaw;
-            
-            let postfix = exp1.sign;
-
-            while(postfix.inner) {
-                const index = (await this.excute(postfix.parserIndex)).result;
-                variable = variable[index];
-                postfix = postfix.inner;
-            }
-            let index;
-            if(postfix.type == 'struct') {
-                index = postfix.record;
-            } else {
-                index = (await this.excute(postfix.parserIndex)).result;
-            }
-            variable[index] = exp2;
-        } else {
-            if(symbolTable.has(varibleName))
-                symbolTable.set(varibleName, exp2);
-            else
-                this.globalVariables.set(varibleName, exp2);
-        }
+    async setValue(exp1, exp2) {
+        let reference = await this.excuteVariable(exp1);
+        reference = reference.result;
+        reference.content = exp2;
     }
 
     async binaryOp(exp1, exp2, sign) {
+        exp1 = exp1.result;
+        exp2 = exp2.result;
+        if(exp1 instanceof Pointer) exp1 = exp1.content;
+        if(exp2 instanceof Pointer) exp2 = exp2.content;
         switch(sign) {
             case '+':
-                return exp1.result+exp2.result;
+                return exp1+exp2;
             case '-':
-                return exp1.result-exp2.result;
+                return exp1-exp2;
             case '*':
-                return exp1.result*exp2.result;
+                return exp1*exp2;
             case '/':
-                return exp1.result/exp2.result;
+                return exp1/exp2;
             case '%':
-                return exp1.result%exp2.result;
+                return exp1%exp2;
             case '<<':
-                return exp1.result<<exp2.result;
+                return exp1<<exp2;
             case '>>':
-                return exp1.result>>exp2.result;
+                return exp1>>exp2;
             case '^':
-                return exp1.result^exp2.result;
+                return exp1^exp2;
             case '|':
-                return exp1.result|exp2.result;
+                return exp1|exp2;
             case '||':
-                return exp1.result||exp2.result;
+                return exp1||exp2;
             case '&&':
-                return exp1.result&&exp2.result;
+                return exp1&&exp2;
             case '&':
-                return exp1.result&exp2.result;
+                return exp1&exp2;
             case '<':
-                return exp1.result<exp2.result?1:0;
+                return exp1<exp2?1:0;
             case '>':
-                return exp1.result>exp2.result?1:0;
+                return exp1>exp2?1:0;
             case '<=':
-                return exp1.result<=exp2.result?1:0;
+                return exp1<=exp2?1:0;
             case '>=':
-                return exp1.result>=exp2.result?1:0;
+                return exp1>=exp2?1:0;
             case '=':
-                await this.setValue(exp1.result, exp2.result);
-                return exp2.result;
+                await this.setValue(exp1, exp2);
+                return exp2;
             case '==':
-                return exp1.result==exp2.result?1:0;
+                return exp1==exp2?1:0;
             default:
                 if (sign.endsWith('=')) {
                     const op = sign.substring(0, sign.length - 1);
-                    const newExp2 = await this.excute({type: RuntimeType.binaryOp, content: [exp1.result, {type: RuntimeType.number, content: exp2.result}], sign: op});
-                    await this.setValue(exp1.result, newExp2.result);
-                    return exp2.result;
+                    const newExp2 = await this.excute({type: RuntimeType.binaryOp, content: [exp1, {type: RuntimeType.number, content: exp2}], sign: op});
+                    await this.setValue(exp1, newExp2);
+                    return exp2;
                 }
         }
     }
@@ -145,6 +140,34 @@ class Runtime {
     async excuteVariable(currentNode) {
         let variable = this.symbolTable.get(currentNode.content);
         if(variable===undefined)variable = this.globalVariables.get(currentNode.content);
+        if(currentNode.suffix) {
+            variable = variable.content;
+            let suffix = currentNode.suffix;
+            while(suffix && suffix) {
+                switch(suffix.type) {
+                    case RuntimeType.arrayDeclearation:
+                        {
+                            let index = (await this.excute(suffix.parserIndex));
+                            index = index.result;
+                            if(index instanceof Pointer) index = index.content;
+                            variable = variable[index];
+                            suffix = suffix.inner;
+                        }
+                        break;
+                    case RuntimeType.structVariable:
+                        {
+                            const record = suffix.record;
+                            if(record.type == RuntimeType.invoke) {
+                                variable = (await this.excute(suffix.record, {structName: currentNode.T.name})).result;
+                            }else {
+                                variable = variable[record.content];
+                            }
+                            suffix = suffix.inner;
+                        }
+                        break;
+                }
+            }
+        }
         return {result: variable, state: {controllState: ControllType.normal}};
     }
 
@@ -158,7 +181,7 @@ class Runtime {
             case '@output':
                 for(const arg of node.argus) {
                     const {result} = await this.excute(arg);
-                    this.output += result;
+                    this.output += result.content;
                 }
                 break;
             case '@arguments':
@@ -170,8 +193,7 @@ class Runtime {
                 for(let i = 1; i < argus.length; i++) {
                     const arg = argus[i];
                     const input = this.input?.shift();
-                    //arg?.mp?.set(arg.content, parseInt(input));
-                    this.setValue(arg.variable, parseInt(input), arg.mp);
+                    arg.pointer.content = parseInt(input);
                 }
                 return {result: 1, state: {controllState: ControllType.normal}}
             case '@outputWithFormat':
@@ -180,7 +202,7 @@ class Runtime {
                     const argument = argus;
                     let output = argument[0];
                     for(let i = 1; i < argument.length; i++) {
-                        output = output.replace('%d', argument[i]);
+                        output = output.replace('%d', argument[i].content);
                     }
 
                     this.output += output;
@@ -251,7 +273,7 @@ class Runtime {
                 break;
             }
             this.stack.push(currentNode.functionName);
-            this.symbolTable.set(para, argus[i]);
+            this.symbolTable.set(para, new Pointer(argus[i]));
         }
 
         const {state, result} = await this.excute(currentNode.body);
@@ -279,10 +301,14 @@ class Runtime {
 
     /**
      * @param {InvokeAST} currentNode 
+     * @param {Object} argus
      * @returns 
      */
-    async excuteInvoke(currentNode) {
-        const func = this.functionTable.get(currentNode.functionName);
+    async excuteInvoke(currentNode, structInfo) {
+        let func = this.functionTable.get(currentNode.functionName);
+        if(structInfo) {
+            func = this.structs.get(structInfo.structName).content.method[currentNode.functionName];
+        }
         const argus = [];
         for(const argu of currentNode.argus) {
             const {result, state} = await this.excute(argu);
@@ -294,21 +320,21 @@ class Runtime {
 
     async getType(type) {
         if(type.type == RuntimeType.arrayDeclearation) {
-            const length = (await this.excute(type.parserIndex)).result;
+            const length = (await this.excute(type.parserIndex)).result.content;
             const ret = [];
             const inner = await this.getType(type.inner);
             for(let i = 0; i < length; i++) {
-                ret.push(inner === 0 ? 0:await this.getType(type.inner));
+                ret.push(await this.getType(type.inner));
             }
             return ret;
         } else if(type.type == RuntimeType.POD) {
-            return 0;
+            return new Pointer(0);
         } else if(type?.type == 'struct') {
-            const struct = this.structs.get(type.name).content;
+            const struct = this.AST.structs.get(type.name).content;
             console.info(struct);
             const res = {};
-            for(let i = 0; i < struct.length; i++) {
-                res[struct[i].content[0][0].content] = 0;
+            for(const key in struct.record) {
+                res[key] = await this.getType(struct.record[key]);
             }
             return res;
         }
@@ -341,9 +367,16 @@ class Runtime {
      */
     async excuteStruct(currentNode) {
         const varibleName = currentNode.content.content;
-        let record = currentNode.sign.record;
         const variable = this.symbolTable.get(varibleName);
-        let value = variable[record];
+        let record = currentNode.sign.record;
+        let value;
+        if(record.type === 0) {
+            record = record.content;
+            value = variable[record]
+        } else {
+            const result = await this.excute(record, {variable, structName: currentNode.content.T.name});
+            value = result.result;
+        }
 
         return {result: value, state: {controllState: ControllType.normal}};
     }
@@ -360,9 +393,9 @@ class Runtime {
 
             if(assignment[1]) {
                 const exp = await this.excute(assignment[1]);
-                this.symbolTable.set(variable, exp.result);
+                this.symbolTable.set(variable, new Pointer(exp.result));
             } else {
-                this.symbolTable.set(variable, defaultValue);
+                this.symbolTable.set(variable, new Pointer(defaultValue));
             }
 
             this.stack.push(variable);
@@ -396,7 +429,7 @@ class Runtime {
             case RuntimeType.string:
                 return {result: currentNode.content, state: {controllState: ControllType.normal}};
             case RuntimeType.invoke:
-                return this.excuteInvoke(currentNode);
+                return this.excuteInvoke(currentNode, argus);
             case RuntimeType.breakStmt:
                 return {result : null, state: {controllState: ControllType.breakState}};
             case RuntimeType.continueStmt:
@@ -415,7 +448,7 @@ class Runtime {
                     return {result, state: {controllState: ControllType.normal}};
                 }
             case RuntimeType.number:
-                return {result: parseInt(currentNode.content), state: {controllState: ControllType.normal}};
+                return {result: new Pointer(parseInt(currentNode.content)), state: {controllState: ControllType.normal}};
             case RuntimeType.declearation:
                 return this.excuteDeclearation(currentNode);
             case RuntimeType.variable:
@@ -437,14 +470,22 @@ class Runtime {
                 }
             case RuntimeType.ifStmt:
                 {
-                    const condition = await this.excute(currentNode.condition);
-                    if(condition.result != 0) {
+                    let condition = await this.excute(currentNode.condition);
+                    condition = condition.result;
+                    if(condition instanceof Pointer) {
+                        condition = condition.content;
+                    }
+                    if(condition != 0) {
                         return this.excute(currentNode.body);
                     }
                     if(currentNode.elif)
                         for(const elif of currentNode.elif) {
-                            const condition = await this.excute(elif.condition);
-                            if(condition.result != 0) {
+                            condition = await this.excute(elif.condition);
+                            condition = condition.result;
+                            if(condition instanceof Pointer) {
+                                condition = condition.content;
+                            }
+                            if(condition != 0) {
                                 return this.excute(elif.body);
                             }
                         }
@@ -478,13 +519,11 @@ class Runtime {
                 {
                     if(currentNode.sign == '++') {
                         const content = await this.excute(currentNode.content);
-                        await this.setValue(currentNode.content, content.result+1);
-                        //this.symbolTable.set(currentNode.content.content, content.result+1);
+                        await this.setValue(currentNode.content, content.result.content+1);
                         return {result: content.result, state: content.state};
                     } else if(currentNode.sign == '--') {
                         const content = await this.excute(currentNode.content);
-                        await this.setValue(currentNode.content, content.result-1);
-                        //this.symbolTable.set(currentNode.content.content, content.result-1);
+                        await this.setValue(currentNode.content, content.result.content-1);
                         return {result: content.result, state: content.state};
                     } else if(currentNode.sign.type == 'struct') {
                         return this.excuteStruct(currentNode);
@@ -506,19 +545,16 @@ class Runtime {
                     }
                     if(currentNode.sign == '-') {
                         const content = await this.excute(currentNode.content);
-                        return {result: -content.result, state: content.state};
+                        return {result: -content.result.content, state: content.state};
                     }
                     if(currentNode.sign == '+') {
                         const content = await this.excute(currentNode.content);
-                        return {result: content.result, state: content.state};
+                        return {result: content.result.content, state: content.state};
                     }
                     if(currentNode.sign == '&') {
                         const content = currentNode.content;
-                        return {result: {
-                            mp: this.symbolTable,
-                            content: content.content,
-                            variable: content
-                        }, state: {controllState: ControllType.normal}};
+                        let pointer = (await this.excute(content)).result;
+                        return {result: {pointer}, state: {controllState: ControllType.normal}};
                     }
                 }
             case RuntimeType.arrayVariable:

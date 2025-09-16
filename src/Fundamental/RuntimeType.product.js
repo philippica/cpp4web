@@ -56,3 +56,12 @@ export const lValue = 26;
 
 /** @type {RuntimeType.arrayVariable} */
 export const arrayVariable = 27;
+
+/** @type {RuntimeType.int} */
+export const int = 28;
+
+/** @type {RuntimeType.double} */
+export const double = 29;
+
+/** @type {RuntimeType.structVariable} */
+export const structVariable = 30;

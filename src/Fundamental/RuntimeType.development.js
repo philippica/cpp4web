@@ -48,3 +48,5 @@ export const postfix = "postfix";
 export const lValue = "lValue";
 
 export const property = "property";
+
+export const structVariable = "structVariable";

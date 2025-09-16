@@ -204,7 +204,7 @@ int main(){
         try {
           AST = Cpp4Web.Parse(stream);
         } catch (e) {
-          stdoutTA.value = e;
+          stdoutTA.value = e.reduce((a, b) => {return a + '\n' + b});
           return;
         }
         runtime = new Cpp4Web.Runtime(AST);

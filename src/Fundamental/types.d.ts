@@ -40,7 +40,10 @@ enum RuntimeType {
     ifStmt,
     postfix,
     lValue,
-    arrayVariable
+    arrayVariable,
+    int,
+    double,
+    structVariable
 };
 
 
@@ -109,19 +112,27 @@ type FunctionAST = {
 type VariableAST = {
     type: RuntimeType.variable;
     T: AST;
-    content: AST
+    content: AST,
+    suffix: ?ArrayDeclearationAST | StructVariable
+}
+
+type StructVariable = {
+    type: RuntimeType.structVariable;
+    content: AST;
+    inner: null|StructVariable;
+    record: AST;
 }
 
 type PrefixAST = {
     type: RuntimeType.prefix;
     sign: String;
-    content: AST
+    content: AST;
 }
 
 type ArrayDeclearationAST = {
     type: RuntimeType.arrayDeclearation;
     parserIndex: AST;
-    inner: AST
+    inner: ArrayDeclearationAST
 }
 
 type TypeAST = {

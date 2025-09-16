@@ -22,7 +22,7 @@ const parseVariable = (parser) => {
     const exp = parser.parseIdentify([]).ast;
     const type = parser.variables.get(exp?.content);
     if(!type) {
-        parser.error = `${exp?.content} is not a varibale`;
+        parser.setError(`${exp?.content} is not a varibale`);
         return parser;
     }
     return parser.setAST({
@@ -41,6 +41,7 @@ const parseNumber = (parser) => {
     parser.setAST({
         type: RuntimeType.number,
         content: exp.content,
+        T: "int"
     });
     return parser;
 }
@@ -131,7 +132,7 @@ const parseInvoke = (parser) => {
     const tokenType = functionNameObj.ast?.type;
     const func = parser.functions.get(functionName);
     if(!func && tokenType === RuntimeType.invoke) {
-        parser.error = `${functionName} is not a function`;
+        parser.error.push(`${functionName} is not a function`);
         return parser;
     }
 
@@ -238,16 +239,25 @@ const parsePostfix = (type, variable) => (parser) => {
             sign: primaryObj.ast,
             content: variable
         });
-    } else if(type.type === 'struct') {
-        console.info(type);
+    } else if(type.type === RuntimeType.struct) {
+
         const typeName = type.name;
-        const T = parser.structs.get("T").content.ast;
+        const T = parser.structs.get("T").content;
         if(parser.currentToken.content == '.') {
             const primaryObj = emptyAST();
+            parser.jumpSign(['.']).choose([
+                [() => parser.currentToken.content in T.record, (_parser) => {
+                    return _parser.parseIdentify([]);
+                }],
+                [() => parser.currentToken.content in T.method, (_parser) => {
+                    return _parser.thenParse(parseInvoke);
+                }],
+                [null, (_parser) => _parser.setError(`${typeName} has no property ${parser.currentToken.content}`)]
+            ]).getAST(primaryObj)
             // @ts-ignore
-            parser.jumpSign(['.']).parseIdentify([]).getAST(primaryObj).setAST({
+            .setAST({
                 type: RuntimeType.postfix,
-                sign: {type: "struct", record: primaryObj.ast.content},
+                sign: {type: "struct", record: primaryObj.ast},
                 content: variable
             });
         }
@@ -255,6 +265,66 @@ const parsePostfix = (type, variable) => (parser) => {
 
     } else
         parser.setAST(variable);
+    return parser;
+}
+
+/**
+ * @param {Object} type 
+ * @param {Object} variable 
+ * @returns {ParserFunction}
+ */
+const parsePostfixV2 = (type, variable) => (parser) => {
+    const currentToken = parser.currentToken.content;
+    const index = emptyAST();
+    const inner = emptyAST();
+
+    switch (type.type) {
+        case RuntimeType.arrayDeclearation: {
+            if(currentToken == '[') {
+                return parser.jumpSign(['['])
+                             .thenParse(expression)
+                             .getAST(index)
+                             .jumpSign([']'])
+                             .thenParse(parsePostfixV2(type.inner, variable))
+                             .getAST(inner)
+                             .setAST({
+                                type: RuntimeType.arrayDeclearation,
+                                inner: inner.ast,
+                                parserIndex: index.ast
+                             });
+            }
+        }
+        case RuntimeType.struct: {
+            if(currentToken == '.') {
+                const typeName = type.name;
+                const T = parser.structs.get(typeName).content;
+                let innerType;
+                return parser.jumpSign(['.'])
+                             .choose([
+                                [() => parser.currentToken.content in T.record, (_parser) => {
+                                    innerType = T.record[parser.currentToken.content];
+                                    return _parser.parseIdentify([]);
+                                }],
+                                [() => parser.currentToken.content in T.method, (_parser) => {
+                                    innerType = T.method[parser.currentToken.content].returnType.T;
+                                    return _parser.thenParse(parseInvoke);
+                                }],
+                                [null, (_parser) => _parser.setError(`${typeName} has no property ${_parser.currentToken.content}`)]
+                             ])
+                             .getAST(index)
+                             .thenParse(parsePostfixV2(innerType, variable))
+                             .getAST(inner)
+                             .setAST({ 
+                                type: RuntimeType.structVariable,
+                                record: index.ast,
+                                inner: inner.ast
+                             });
+            }
+        }
+        default: {
+            parser.ast = null;
+        }
+    }
     return parser;
 }
 
@@ -269,16 +339,21 @@ const parsePostfixExpression = (parser) => {
                  .getAST(primaryObj)
                  .thenParse((_parser) => {
                      let primaryExp = primaryObj.ast;
+                     let suffix = emptyAST();
                      if(primaryExp.type === RuntimeType.variable) {
                          const type = primaryExp.T;
-                         parser.thenParse(parsePostfix(type, primaryExp)).getAST(primaryExp);
+                         _parser.thenParse(parsePostfixV2(type, primaryExp)).getAST(suffix);
+                         if(suffix && suffix.ast) {
+                             primaryExp.suffix = suffix.ast;
+                         }
+                         parser.setAST(primaryExp);
                      }
 
                      if(parser.attempt((_parser) =>  _parser.parseSign(['++', '--']))) {
                          parser.setAST({
                              type: RuntimeType.postfix,
                              sign: parser.ast.content,
-                             content: primaryExp.ast,
+                             content: primaryExp,
                          });
                      }
                      return _parser;
@@ -705,6 +780,7 @@ const parseBlock = (parser) => {
     parser.stack.push('{');
     const lineNum = parser.currentToken.line;
     const seq = parser.jumpSign(['{']).sequence(singleStatement).jumpSign(['}']).ast;
+    
     seq.lineNum = lineNum;
 
     while(parser.stack[parser.stack.length-1] != '{') {
@@ -774,10 +850,31 @@ const parseStruct = (parser) => {
     const struct = parser.parseKeywords(['struct', 'class'])
                          .parseIdentify([]).getAST(Type)
                          .jumpSign(['{'])
-                         .sequence((_parser) => _parser.thenParse(parseDeclearation).jumpSemicolon())
+                         .sequence((_parser) => _parser.choose([
+                            [null, (_parser) => parseDeclearation(_parser).jumpSemicolon()],
+                            [null, parseFunction]
+                         ]))
                          .jumpSign(['}'])
                          .jumpSemicolon()
                          .getAST(content)
+                         .thenParse((_parser) => {
+                            console.info(content);
+                            const ast = content.ast;
+                            const record = {};
+                            const method = {};
+                            for(let element of ast) {
+                                if(element.type === RuntimeType.declearation) {
+                                    element.content.forEach(declearation => {
+                                        record[declearation[0].content] = declearation[2];
+                                    });
+                                }
+                                if(element.type === RuntimeType.functionStmt) {
+                                    method[element.functionName] =  element;
+                                }
+                            }
+                            content.ast = {record, method};
+                            return _parser;
+                         })
                          .setAST({
                             type: RuntimeType.struct,
                             name: Type.ast.content,
@@ -804,7 +901,7 @@ const parseProgram = (parser) => {
         ])
     ).thenParse((_parser) => {
         if(!_parser.empty()) {
-            _parser.setError(_parser.meta.attemptErrorMessage);
+            _parser.error = _parser.error.concat(_parser.meta.attemptErrorMessage);
         }
         return _parser;
     }).setAST({
@@ -824,7 +921,7 @@ const Parse = (stream) => {
     const parser = new Parser(stream);
 
     const result = parseProgram(parser).ast;
-    if(parser.error) {
+    if(parser.error.length !== 0) {
         throw parser.error;
     }
     return result;

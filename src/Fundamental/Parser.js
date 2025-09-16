@@ -16,10 +16,10 @@ class Parser {
     constructor(stream, parserIndex) {
         this.#stream = stream;
         this.parserIndex = parserIndex ?? 0;
-        this.error = null;
+        this.error = [];
         this.structOrUnion = {};
         this.ast = {};
-        this.meta = {};
+        this.meta = {attemptErrorMessage: []};
         this.variables = new Map();
         this.stack = [];
         this.functions = new Map();
@@ -32,9 +32,9 @@ class Parser {
      * @returns {Parser} - The updated parser instance.
      */
     thenParse(parserFunction) {
-        if(!this.error) {
+        if(this.error.length === 0) {
             const ret = parserFunction(this);
-            if(!this.error) {
+            if(this.error.length === 0) {
                 this.ast = ret.ast;
                 this.parserIndex = ret.parserIndex;
             }
@@ -48,16 +48,16 @@ class Parser {
      * @returns {boolean} - `true` if successful, `false` otherwise.
      */
     attempt(parserFunction) {
-        if(!this.error) {
+        if(this.error.length === 0) {
             const parser = this.copy();
             
             const ret = parserFunction(parser);
-            if(!ret.error) {
+            if(ret.error.length === 0) {
                 this.ast = ret.ast;
                 this.parserIndex = ret.parserIndex;
                 return true;
             }
-            this.meta.attemptErrorMessage = ret.error;
+            this.meta.attemptErrorMessage = this.meta.attemptErrorMessage.concat(ret.error);
         }
         return false;
     }
@@ -87,7 +87,8 @@ class Parser {
      */
     setError(error) {
         this.ast = {};
-        this.error = error;
+        error += ` at line ${this.currentLine + 1}`;
+        this.error.push(error);
         return this;
     }
 
@@ -149,16 +150,19 @@ class Parser {
 
 
     /**
-     * @param {Array<[null|Array<string>, ParserFunction, Function] | [null|Array<string>, ParserFunction]>} parserFunctions 
+     * @param {Array<[null|Array<string>| Function, ParserFunction, Function] | [null|Array<string>| Function, ParserFunction]>} parserFunctions 
      * @returns {Parser}
      */
     choose(parserFunctions) {
-        if(this.error)return this;
+        if(this.error.length)return this;
+        const errors = [];
         for(const parserFunction of parserFunctions) {
             const foresees = parserFunction[0];
             const parserFunc = parserFunction[1];
             const afterFunc = parserFunction[2];
-            if(foresees) {
+            if (typeof(foresees) == 'function') {
+                if(!foresees(this))continue;
+            } else if(foresees) {
                 for(const foresee of foresees) {
                     if(this.currentToken.content === foresee && (this.currentToken.type === TokenType.sign || this.currentToken.type === TokenType.keyword)) {
                         const result = parserFunc(this);
@@ -166,20 +170,19 @@ class Parser {
                         return result;
                     }
                 }
-            } else {
-                const result = this.attempt((parser) => {
-                    return parserFunc(parser);
-                });
+            }
+            const result = this.attempt((parser) => {
+                return parserFunc(parser);
+            });
 
-                if(result) {
-                    if(afterFunc) afterFunc(this);
-                    return this;
-                }
+            if(result) {
+                if(afterFunc) afterFunc(this);
+                return this;
             }
         }
-        this.error = this.meta.attemptErrorMessage;
-        if(!this.error) {
-            this.error = "stop";
+        this.error = this.error.concat(this.meta.attemptErrorMessage);
+        if(this.error.length === 0) {
+            this.error.push("stop");
         }
         return this;
     }
@@ -193,6 +196,7 @@ class Parser {
      * @returns {Parser} - The updated parser instance.
      */
     parseSingle = (type, contents, jump=false) => {
+        if (this.error.length)return this;
         if(this.checkToken(type, contents)) {
             if(!jump){
                 this.ast = {
@@ -201,7 +205,7 @@ class Parser {
                 };
             }
             this.parserIndex++;
-        } else this.error = `cannot find ${contents[0]} at line ${this.currentLine}`;
+        } else this.setError(`cannot find ${contents[0]}`);
         return this;
     }
 
@@ -253,7 +257,7 @@ class Parser {
     }
 
     checkToken(type, contents) {
-        if(this.error) return false;
+        if(this.error.length) return false;
         const token = this.currentToken;
         if(token.type === type && (contents.length === 0 || contents.indexOf(token.content) !== -1)) {
             return true;

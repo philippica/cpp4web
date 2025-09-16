@@ -12,7 +12,57 @@
 
 let tests = [
 {
-    title: "array",
+    title: "input",
+    input: "6 2 3 4 5 6 7 8 9 10",
+    code: 
+    `
+#include <cstdio>
+int main(){
+    int n;
+    scanf("%d", &n);
+    printf("%d", n);
+    return 0;
+}
+    `,
+    expect:
+    `6`
+},
+{
+    title: "graph",
+    code:`#include <cstdio>
+int g[12][12], ans = 0;///vector<int> g[100009];
+void dfs(int node, int parent) {
+    int cnt = 0, tmp = 1;
+	for(int i = 1; i <= g[node][0]; i++) { int child = g[node][i];///for(int child: g[node]) {
+		if(child == parent)continue;
+		cnt++;
+		dfs(child, node);
+	}
+	while(tmp < cnt+1) {
+        tmp = tmp * 2;
+        ans++;
+	}
+	ans = ans + cnt;
+}
+int main() {
+	int n;
+	n = 4;///cin >> n;
+	for(int i = 1; i < n; i++) {
+		int x, y;
+		x = 1; y = i + 1;///cin >> x >> y;
+		g[x][g[x][0]+1]=y;g[x][0]++;///g[x].push_back(y);
+		g[y][g[y][0]+1]=x;g[y][0]++;///g[y].push_back(x);
+	}
+	dfs(1, -1);
+	printf("%d", ans);///cout << ans;
+}
+`,
+    expect:
+    `5`
+
+},
+{
+    title: "struct",
     code: 
     `
 #include <cstdio>
@@ -24,12 +74,16 @@ int main(){
     T a;
     a.x = 1;
     a.y = a.x;
-    printf("%d", a.y);
+    printf("%d ", a.y);
+
+    T b[10];
+    b[0].x = 2;
+    printf("%d", b[0].x);
     return 0;
 }
     `,
     expect:
-    `1`
+    `1 2`
 },
 {
     title: "array",
@@ -206,6 +260,39 @@ int main(){
 },
 
 {
+    title: "struct and method",
+    code: 
+    `
+
+#include <cstdio>
+struct T {
+    int x;
+    int y;
+    int foo() {
+        return 5;
+    }
+};
+
+int bar() {
+    return 9;
+}
+
+T a;
+
+int main(){
+    a.y = 1;
+    int u = a.foo();
+    int v = bar();
+    //a.foo();
+    printf("%d %d %d", a.y, u, v);
+    return 0;
+}
+    `,
+    expect:
+    `1 5 9`
+},
+
+{
     title: "two pointers",
     code: 
     `
@@ -258,13 +345,13 @@ int main()
 
 //tests = [tests[5]];
 
-async function Test(code, expect) {
+async function Test(code, expect, input) {
     const stream = Cpp4Web.Tokenizer(code);
     let AST;
     try {
         AST = Cpp4Web.Parse(stream);
         const runtime = new Cpp4Web.Runtime(AST);
-        const {output} = await runtime.launch("",{
+        const {output} = await runtime.launch(input, {
             debug: false,
             debugCallback: (msg) => {
                 console.info(msg);
@@ -305,14 +392,14 @@ async function Test(code, expect) {
 
 const runTests = async() =>{
     for(let i = 0; i < tests.length; i++) {
-    //for(let i = 0; i < 1; i++) {
+    //for(let i = 0; i < 2; i++) {
         const test = tests[i];
-        const result = await Test(test.code, test.expect);
+        const result = await Test(test.code, test.expect, test.input);
         const outputDiv = document.getElementById("output");
         if(result == 1) {
             outputDiv.innerHTML += `${i}: Test "${test.title}":  <b style="color: #4dde4d;">OK</b>\n\n`;
         } else {
-            outputDiv.innerHTML += `${i}: Test "${test.title}": <b style="color: #de4d4d;">Incorrect</b>\noutput: ${result?.output}\n\nexpect: ${test.expect}\n\n<pre>${test.code}</pre>`;
+            outputDiv.innerHTML += `${i}: Test "${test.title}": <b style="color: #de4d4d;">Incorrect</b>\noutput: ${result?.output}\n\nexpect: ${test.expect}\n\n<pre>${test.code.replace("<", "&lt;").replace(">", "&gt;")}</pre>`;
         }
         outputDiv.innerHTML += '<hr>';
     }
