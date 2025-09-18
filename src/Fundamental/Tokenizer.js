@@ -1,5 +1,6 @@
 import { TokenType, keyWords, signs } from "./Constant";
 import { cstdio } from "../Header/cstdio";
+import { iostream } from "../Header/iostream";
 
 /**
  * Tokenizes a raw string of code.
@@ -112,7 +113,8 @@ const preCompile = (stream, stream2) => {
             };
             const headerList = {
                 "cstdio": cstdio,
-                "stdio": cstdio
+                "stdio": cstdio,
+                "iostream": iostream
             };
             const header = headerList[stream[index].content];
             const lines = header.split('\n');

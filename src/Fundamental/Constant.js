@@ -2,7 +2,7 @@ const keyWords = ["int", "void", "double", "float", "short", "char", "bool", "lo
 "asm","do","if","return","typedef","auto","inline","typeid","dynamic_cast","typename",
 "break","else","sizeof","union","case","enum","mutable","static","catch","explicit","namespace","static_cast",
 "using","export","new","struct","virtual","class","extern","operator","switch","const","false","private","template",
-"volatile","const_cast","protected","this","wchar_t","continue","for","public","throw","while","default","friend","register","true",
+"volatile","const_cast","protected","wchar_t","continue","for","public","throw","while","default","friend","register","true",
 "delete","goto","reinterpret_cast","try",];
 
 const signs = ["==", "<<=", ">>=", "*=", "+=", "~=", "-=", "/=", "|=", "^=", "%=", "&=", "=", "<<", ">>", "#", "::", "?", ":", ">=", "<=", 

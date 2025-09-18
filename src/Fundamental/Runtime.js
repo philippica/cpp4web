@@ -5,16 +5,26 @@ import * as RuntimeType from 'runtime';
 class Pointer {
     constructor(content) {
         if (content instanceof Pointer) {
-            this.content = content.content;
+            if (content._content instanceof Pointer) {
+                this._content = content._content;
+            } else {
+                this._content = content;
+            }
         } else {
-            this.content = content;
+            this._content = content;
         }
     }
-    get() {
-        return this.content;
+    get content() {
+        if(this._content instanceof Pointer) {
+            return this._content.content;
+        }
+        return this._content;
     }
-    set(value) {
-        this.content = value;
+    set content(value) {
+        if(this._content instanceof Pointer) {
+            this._content._content = value;
+        }
+        this._content = value;
     }
 }
 
@@ -158,7 +168,7 @@ class Runtime {
                         {
                             const record = suffix.record;
                             if(record.type == RuntimeType.invoke) {
-                                variable = (await this.excute(suffix.record, {structName: currentNode.T.name})).result;
+                                variable = (await this.excute(suffix.record, {structName: currentNode.T.name, variable})).result;
                             }else {
                                 variable = variable[record.content];
                             }
@@ -201,6 +211,7 @@ class Runtime {
                     const {result: argus} = await this.excute(node.argus[0]);
                     const argument = argus;
                     let output = argument[0];
+                    if(output instanceof Pointer) output = output.content;
                     for(let i = 1; i < argument.length; i++) {
                         output = output.replace('%d', argument[i].content);
                     }
@@ -306,13 +317,19 @@ class Runtime {
      */
     async excuteInvoke(currentNode, structInfo) {
         let func = this.functionTable.get(currentNode.functionName);
-        if(structInfo) {
-            func = this.structs.get(structInfo.structName).content.method[currentNode.functionName];
-        }
         const argus = [];
         for(const argu of currentNode.argus) {
             const {result, state} = await this.excute(argu);
             argus.push(result);
+        }
+        if(structInfo) {
+            func = this.structs.get(structInfo.structName).content.method[currentNode.functionName];
+            const variable = structInfo.variable;
+            for(const key in variable) {
+                func.parameters.push({variable: {content: key}, type: null});
+                argus.push(variable[key]);
+            }
+
         }
         const {result, state} = await this.excute(func, argus);
         return {result, state};
@@ -329,7 +346,7 @@ class Runtime {
             return ret;
         } else if(type.type == RuntimeType.POD) {
             return new Pointer(0);
-        } else if(type?.type == 'struct') {
+        } else if(type?.type == RuntimeType.struct) {
             const struct = this.AST.structs.get(type.name).content;
             console.info(struct);
             const res = {};
@@ -442,8 +459,17 @@ class Runtime {
                 return this.excuteArray(currentNode);
             case RuntimeType.binaryOp:
                 {
-                    const exp1 = await this.excute(currentNode.content[0]);
+                    const v1 = currentNode.content[0];
+                    const exp1 = await this.excute(v1);
                     const exp2 = await this.excute(currentNode.content[1]);
+                    if((v1.type == RuntimeType.variable && v1.T.type == RuntimeType.struct) || (v1.T && v1.T.type == RuntimeType.struct)) {
+                        const typeInfo = this.structs.get(v1.T.name).content;
+                        for(let op in typeInfo.operator) {
+                            if(op == currentNode.sign) {
+                                return await this.excuteInvoke({argus: [currentNode.content[1]], functionName: op}, {structName: v1.T.name, variable: exp1.result});
+                            }
+                        }
+                    }
                     const result = await this.binaryOp(exp1, exp2, currentNode.sign);
                     return {result, state: {controllState: ControllType.normal}};
                 }

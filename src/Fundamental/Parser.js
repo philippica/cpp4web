@@ -162,6 +162,14 @@ class Parser {
             const afterFunc = parserFunction[2];
             if (typeof(foresees) == 'function') {
                 if(!foresees(this))continue;
+                    const result = this.attempt((parser) => {
+                    return parserFunc(parser);
+                });
+
+                if(result) {
+                    if(afterFunc) afterFunc(this);
+                    return this;
+                }
             } else if(foresees) {
                 for(const foresee of foresees) {
                     if(this.currentToken.content === foresee && (this.currentToken.type === TokenType.sign || this.currentToken.type === TokenType.keyword)) {
@@ -170,14 +178,15 @@ class Parser {
                         return result;
                     }
                 }
-            }
-            const result = this.attempt((parser) => {
-                return parserFunc(parser);
-            });
+            } else {
+                const result = this.attempt((parser) => {
+                    return parserFunc(parser);
+                });
 
-            if(result) {
-                if(afterFunc) afterFunc(this);
-                return this;
+                if(result) {
+                    if(afterFunc) afterFunc(this);
+                    return this;
+                }
             }
         }
         this.error = this.error.concat(this.meta.attemptErrorMessage);

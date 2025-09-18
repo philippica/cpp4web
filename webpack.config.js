@@ -20,10 +20,25 @@ const compress = [
   "index",
   "structOrUnion",
   "blockComment",
-  "excute"
+  "excute",
+  "symbolTable",
+  "arrayVariable",
+  "structs",
+  "result",
+  "functionName",
+  "structName",
+  "controllState",
+  "content",
+  "globalVariables",
+  "sign",
+  "returnType",
+  "parameters",
+  "getType"
+
 ].reduce((a,b) => a + "|" + b);
 
 module.exports = {
+  //mode: 'production',
   entry: path.resolve(__dirname, './src/index'),
   output: {
     path: path.resolve(__dirname, 'dist'),

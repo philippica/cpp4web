@@ -20,8 +20,10 @@ function emptyAST () {
  */
 const parseVariable = (parser) => {
     const exp = parser.parseIdentify([]).ast;
-    const type = parser.variables.get(exp?.content);
-    if(!type) {
+    let type = parser.variables.get(exp?.content);
+    if(exp.content == 'this'){
+        type = {type: RuntimeType.POD, name: "this"};
+    } else if(!type) {
         parser.setError(`${exp?.content} is not a varibale`);
         return parser;
     }
@@ -75,6 +77,7 @@ const parseBinaryOperations = (signs, nextParserFunction) => (parser) => {
                     type: RuntimeType.binaryOp,
                     sign: signWrapper.ast.content,
                     content: [_parser.meta.last, exp2Wrapper.ast],
+                    T: exp1.T
                 });
     }, exp1);
 }
@@ -113,6 +116,7 @@ const parseChar = (parser) => {
     return parser.setAST({
         type: RuntimeType.string,
         content: value,
+        T: "char"
     });
 }
 
@@ -188,85 +192,6 @@ const parseArrayDeclearation2 = (innerType) => (parser) => {
     ]);
 }
 
-/**
- * @param {Object} innerType 
- * @returns {ParserFunction}
- */
-const parseArray2 = (innerType, variable) => (parser) => {
-
-    const index = emptyAST();
-    const inner = emptyAST();
-    return parser.choose([
-        [['['], (_parser) => _parser.thenParse((_parser)=>{
-                                        if(innerType.type !== RuntimeType.arrayDeclearation)return _parser.setError("type error");
-                                        return _parser;
-                                    })
-                                    .jumpSign(['['])
-                                    .thenParse(expression).getAST(index)
-                                    .jumpSign([']'])
-                                    .thenParse(parseArray2(innerType, variable)).getAST(inner)
-                                    .setAST({
-                                      type: RuntimeType.array,
-                                      inner: inner.ast,
-                                      parserIndex: index.ast
-                                    })
-        ],
-        [['.'], (_parser) => _parser.jumpSign(['.'])
-                                    .parseIdentify([]).getAST(index)
-                                    // @ts-ignore
-                                    .setAST({
-                                        type: RuntimeType.struct,
-                                        record: index.ast.content,
-                                        content: variable
-                                    })
-        ],
-        // @ts-ignore
-        [null, (_parser) => _parser.setAST(null)],
-    ]);
-}
-
-
-/**
- * @param {Object} type 
- * @param {Object} variable 
- * @returns {ParserFunction}
- */
-const parsePostfix = (type, variable) => (parser) => {
-    if(type.type === RuntimeType.arrayDeclearation) {
-        const primaryObj = emptyAST();
-        parser.thenParse(parseArray2(type, variable)).getAST(primaryObj).setAST({
-            type: RuntimeType.postfix,
-            sign: primaryObj.ast,
-            content: variable
-        });
-    } else if(type.type === RuntimeType.struct) {
-
-        const typeName = type.name;
-        const T = parser.structs.get("T").content;
-        if(parser.currentToken.content == '.') {
-            const primaryObj = emptyAST();
-            parser.jumpSign(['.']).choose([
-                [() => parser.currentToken.content in T.record, (_parser) => {
-                    return _parser.parseIdentify([]);
-                }],
-                [() => parser.currentToken.content in T.method, (_parser) => {
-                    return _parser.thenParse(parseInvoke);
-                }],
-                [null, (_parser) => _parser.setError(`${typeName} has no property ${parser.currentToken.content}`)]
-            ]).getAST(primaryObj)
-            // @ts-ignore
-            .setAST({
-                type: RuntimeType.postfix,
-                sign: {type: "struct", record: primaryObj.ast},
-                content: variable
-            });
-        }
-
-
-    } else
-        parser.setAST(variable);
-    return parser;
-}
 
 /**
  * @param {Object} type 
@@ -295,10 +220,10 @@ const parsePostfixV2 = (type, variable) => (parser) => {
             }
         }
         case RuntimeType.struct: {
+            const typeName = type.name;
+            const T = parser.structs.get(typeName).content;
+            let innerType;
             if(currentToken == '.') {
-                const typeName = type.name;
-                const T = parser.structs.get(typeName).content;
-                let innerType;
                 return parser.jumpSign(['.'])
                              .choose([
                                 [() => parser.currentToken.content in T.record, (_parser) => {
@@ -314,11 +239,33 @@ const parsePostfixV2 = (type, variable) => (parser) => {
                              .getAST(index)
                              .thenParse(parsePostfixV2(innerType, variable))
                              .getAST(inner)
-                             .setAST({ 
+                             .setAST({
                                 type: RuntimeType.structVariable,
                                 record: index.ast,
                                 inner: inner.ast
                              });
+            } else {
+                /*
+                for(let key in T.operator) {
+                    if(currentToken === key) {
+                        let record = {type: RuntimeType.invoke};
+                        let nextPara = emptyAST();
+                        return parser.parseSign([]).thenParse(parseConditionalExpression).getAST(nextPara).thenParse((_parser) =>{
+                            innerType = T.operator[key].returnType.T;
+                            record.functionName = key;
+                            record.argus = [nextPara.ast];
+                            return _parser;
+                        })
+                        .thenParse(parsePostfixV2(innerType, variable))
+                        .getAST(inner)
+                        .setAST({
+                            type: RuntimeType.structVariable,
+                            record,
+                            inner: inner.ast
+                        });
+                    }
+                }
+                    */
             }
         }
         default: {
@@ -805,7 +752,11 @@ const parseFunction = (parser) => {
     const parameters = {ast:{type: RuntimeType.empty}};
     let functionName = "";
     return parser.thenParse(parseType).getAST(returnType)
-          .parseIdentify([]).getAST(functioinNameObj)
+          .choose([
+            [["operator"], (_parser) => _parser.parseKeywords(["operator"]).parseSign([])],
+            [null, (_parser) => _parser.parseIdentify([])],
+          ])
+          .getAST(functioinNameObj)
           .thenParse((_parser) => {
             const fn = functioinNameObj.ast;
             functionName = fn.content;
@@ -850,6 +801,10 @@ const parseStruct = (parser) => {
     const struct = parser.parseKeywords(['struct', 'class'])
                          .parseIdentify([]).getAST(Type)
                          .jumpSign(['{'])
+                         .thenParse((_parser) => {
+                            _parser.structs.set(Type.ast.content, {});
+                            return _parser;
+                         })
                          .sequence((_parser) => _parser.choose([
                             [null, (_parser) => parseDeclearation(_parser).jumpSemicolon()],
                             [null, parseFunction]
@@ -862,6 +817,7 @@ const parseStruct = (parser) => {
                             const ast = content.ast;
                             const record = {};
                             const method = {};
+                            const operator = {};
                             for(let element of ast) {
                                 if(element.type === RuntimeType.declearation) {
                                     element.content.forEach(declearation => {
@@ -869,10 +825,14 @@ const parseStruct = (parser) => {
                                     });
                                 }
                                 if(element.type === RuntimeType.functionStmt) {
+                                    const fn = element.functionName;
+                                    if(/^[^a-zA-Z_].*/.test(fn)) {
+                                        operator[fn] = element;
+                                    }
                                     method[element.functionName] =  element;
                                 }
                             }
-                            content.ast = {record, method};
+                            content.ast = {record, method, operator};
                             return _parser;
                          })
                          .setAST({
