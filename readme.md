@@ -2,6 +2,10 @@
 
 Cpp4Web is a JavaScript library that serves as an interpreter for C++. It allows you to tokenize C++ code, parse it into an Abstract Syntax Tree (AST), and run the code to produce an output.
 
+Here is a demo: https://philippica.github.io/cpp4web/
+
+Warning: This is an experimental project for educational purposes only, and it implements only a very limited subset of C++ features.
+
 ## Usage
 
 1. To tokenize C++ code to tokens:
