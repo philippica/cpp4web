@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>C++ 在线编辑器 · 单文件 Demo</title>
+  <style>
+    :root {
+      --bg: #0f1220;
+      --panel: #151932;
+      --accent: #5b8cff;
+      --text: #e8ebff;
+      --muted: #a6b0d8;
+      --shadow: 0 10px 30px rgba(0,0,0,.4);
+      --radius: 18px;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0; background: radial-gradient(1200px 600px at 10% -10%, #1b2050 0%, var(--bg) 55%), var(--bg);
+      font-family: Inter;
+      color: var(--text);
+      display: grid; place-items: start center;
+      padding: 30px 16px 40px;
+    }
+    .wrap {
+      width: min(1100px, 100%);
+      display: grid; gap: 16px;
+    }
+    header {
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+      border: 1px solid rgba(255,255,255,.08);
+      box-shadow: var(--shadow);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 10px; backdrop-filter: blur(6px);
+    }
+    .title {
+      font-size: 18px; font-weight: 800; letter-spacing: .3px;
+      display: inline-flex; align-items: center; gap: 10px;
+    }
+    .title .badge {
+      font-size: 12px; font-weight: 600; color: #0b1022;
+      background: linear-gradient(135deg, #9cb6ff, #6fa2ff 60%, #5b8cff);
+      padding: 4px 8px; border-radius: 999px;
+    }
+    .controls { display: flex; gap: 10px; align-items: center; }
+    button {
+      appearance: none; border: 0; cursor: pointer;
+      background: linear-gradient(180deg, #6fa2ff, #5b8cff);
+      color: white; font-weight: 700; letter-spacing: .2px;
+      padding: 10px 14px; border-radius: 12px; box-shadow: var(--shadow);
+      transition: transform .06s ease, filter .2s ease;
+    }
+    button.secondary {
+      background: linear-gradient(180deg, #2c2f48, #232743);
+      color: var(--muted); font-weight: 600; border: 1px solid rgba(255,255,255,.08);
+    }
+    button:hover { filter: brightness(1.05); }
+    button:active { transform: translateY(1px); }
+
+    .panel {
+      background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02));
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .editor-bar {
+      padding: 10px 14px; display: flex; align-items: center; justify-content: space-between;
+      font-size: 12px; color: var(--muted); border-bottom: 1px solid rgba(255,255,255,.06);
+      background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+    }
+    .editor-container { height: 560px; }
+
+    .hint {
+      font-size: 12px; color: var(--muted);
+      text-align: center; padding-top: 6px;
+    }
+
+
+    /* 左编辑器 + 右IO面板布局 */
+    .workspace { display: grid; grid-template-columns: 1fr 360px; gap: 12px; padding: 12px; }
+    .io-panel { display: grid; grid-template-rows: 1fr 1fr; gap: 12px; }
+    .io-card {
+      background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+      border: 1px solid rgba(255,255,255,.06); border-radius: 14px; overflow: hidden;
+      display: grid; grid-template-rows: auto 1fr;
+    }
+    .io-head { font-size: 12px; color: var(--muted); padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,.06); display:flex; align-items:center; justify-content:space-between }
+    .io-body { padding: 8px; }
+    .io-textarea {
+      width: 100%; height: 100%; min-height: 160px; resize: none; outline: none; border: 0;
+      border-radius: 10px; padding: 10px; background: #0f142c; color: var(--text);
+      font-family: ui-monospace, SFMono-Regular;
+    }
+
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="title">
+        <span>C++ compiler</span>
+      </div>
+      <div class="controls">
+        <button id="logBtn">Compile</button>
+        <div>
+          <label for="debugMode" style="font-size: 12px; color: var(--muted); user-select: none; cursor: pointer;">Debug Mode</label>
+          <input type="checkbox" id="debugMode"/>
+        </div>
+      </div>
+    </header>
+
+    <section class="panel">
+      <div class="workspace">
+        <div id="editor" class="editor-container"></div>
+
+        <aside class="io-panel">
+          <div class="io-card">
+            <div class="io-head">Input</div>
+            <div class="io-body">
+              <textarea id="stdin" class="io-textarea" placeholder="Input"></textarea>
+            </div>
+          </div>
+
+          <div class="io-card">
+            <div class="io-head">Output</div>
+            <div class="io-body">
+              <textarea id="stdout" class="io-textarea" placeholder="Output" readonly></textarea>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
+    <script src="./index.js"> </script>
+
+  </div>
+
+  <!-- Monaco Editor CDN Loader -->
+  <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.49.0/min/vs/loader.js"></script>
+  <script>
+    let runtime;
+    // Monaco 配置与初始化
+    window.require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.49.0/min/vs' } });
+    window.require(['vs/editor/editor.main'], function () {
+      const LS_CODE_KEY = 'cpp_editor_code_v1';
+      const LS_INPUT_KEY = 'cpp_editor_input_v1';
+
+      const initialCode = `#include <cstdio>
+int main(){
+    int n;
+    scanf("%d", &n);
+    printf("%d", n);
+    return 0;
+}}`;
+
+      const editor = monaco.editor.create(document.getElementById('editor'), {
+        value: initialCode,
+        language: 'cpp',
+        theme: 'vs-dark',
+        fontSize: 15,
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+        automaticLayout: true,
+        roundedSelection: true,
+        minimap: { enabled: true },
+        scrollbar: { verticalScrollbarSize: 12, horizontalScrollbarSize: 12 },
+        tabSize: 2,
+        wordWrap: 'on'
+      });
+
+
+    const stdinTA = document.getElementById('stdin');
+    const stdoutTA = document.getElementById('stdout');
+
+    const savedCode = localStorage.getItem(LS_CODE_KEY);
+    if (savedCode) editor.setValue(savedCode);
+    const savedInput = localStorage.getItem(LS_INPUT_KEY);
+    if (savedInput) stdinTA.value = savedInput;
+
+
+      let saveTimer = null;
+      editor.onDidChangeModelContent(() => {
+        clearTimeout(saveTimer);
+        localStorage.setItem(LS_CODE_KEY, editor.getValue());
+      });
+
+
+      function appendOutput(text){
+        const prev = stdoutTA.value;
+        stdoutTA.value = prev + (prev ? '\n' : '') + (text ?? '');
+        stdoutTA.scrollTop = stdoutTA.scrollHeight; // 自动滚动到底部
+      }
+
+      window.appIO = { appendOutput };
+
+      stdinTA.addEventListener('input', () => {
+        localStorage.setItem(LS_INPUT_KEY, stdinTA.value);
+      });
+
+      // ---- 打印按钮：输出到 Console + 输出框 ----
+      const logBtn = document.getElementById('logBtn');
+      logBtn.addEventListener('click', async () => {
+        const code = editor.getValue();
+        const inputText = stdinTA.value;
+        const stream = Cpp4Web.Tokenizer(code);
+        try {
+          AST = Cpp4Web.Parse(stream);
+        } catch (e) {
+          stdoutTA.value = e.reduce((a, b) => {return a + '\n' + b});
+          return;
+        }
+        runtime = new Cpp4Web.Runtime(AST);
+        const debugMode = document.getElementById('debugMode').checked;
+
+        let lineNum = 0;
+        const {output} = await runtime.launch(inputText, {debug: debugMode, debugCallback: (msg) => {
+          console.info(msg);
+          console.info("dbg");
+          return new Promise((resolve) => {
+          const onKeyDown = (event) => {
+              if (event.key === 'F9') {
+                const lines = document.getElementsByClassName("line-numbers");
+
+
+                if(lineNum != 0) {
+                  lines[lineNum - 1].style.backgroundColor = "";
+                }
+                lineNum = msg.currentNode.lineNum;
+                lines[lineNum - 1].style.backgroundColor = "rgba(255, 255, 0, 0.2)";
+                stdoutTA.value = msg.output;
+                document.removeEventListener('keydown', onKeyDown);
+                resolve();
+              }
+          };
+          document.addEventListener('keydown', onKeyDown);
+      });
+        }});
+
+        stdoutTA.value = output;
+        
+      });
+
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
+        logBtn.click();
+      });
+
+
+      // 防止移动端双击缩放
+      document.addEventListener('gesturestart', e => e.preventDefault());
+    });
+  </script>
+</body>
+</html>
