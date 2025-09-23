@@ -245,17 +245,17 @@ const parsePostfixV2 = (type, variable) => (parser) => {
                                 inner: inner.ast
                              });
             } else {
-                /*
                 for(let key in T.operator) {
-                    if(currentToken === key) {
+                    if(currentToken === key && key == '[') {
                         let record = {type: RuntimeType.invoke};
                         let nextPara = emptyAST();
-                        return parser.parseSign([]).thenParse(parseConditionalExpression).getAST(nextPara).thenParse((_parser) =>{
+                        return parser.parseSign(['[']).thenParse(parseConditionalExpression).getAST(nextPara).thenParse((_parser) =>{
                             innerType = T.operator[key].returnType.T;
                             record.functionName = key;
                             record.argus = [nextPara.ast];
                             return _parser;
                         })
+                        .parseSign([']'])
                         .thenParse(parsePostfixV2(innerType, variable))
                         .getAST(inner)
                         .setAST({
@@ -265,7 +265,6 @@ const parsePostfixV2 = (type, variable) => (parser) => {
                         });
                     }
                 }
-                    */
             }
         }
         default: {
@@ -498,7 +497,11 @@ const parseStructType = (parser) => {
     if(!parser.structs.has(typeName)) {
         return parser.setError("not struct");
     }
-    return parser.parseIdentify([]).setAST({
+    return parser.parseIdentify([]).sequence((_parser) => {
+            _parser.parseSign(['<']).thenParse(parseType).parseSign(['>']);
+            return _parser;
+        })
+        .setAST({
         type: RuntimeType.type,
         T: {
             type: RuntimeType.struct,
@@ -515,6 +518,7 @@ const parseType = (parser) => {
     const PODs = keyWords.slice(0,11);
     const type = {};
     return parser.choose([
+        [["long"], (_parser) => _parser.parseKeywords(['long']).thenParse((_parser) => _parser.parseKeywords(['long', 'double', 'int', 'float'])).getAST(type).setAST( {type: RuntimeType.type, T: {type: RuntimeType.POD, name: 'long ' + type.ast}} )],
         [PODs, (_parser)=> _parser.parseKeywords(PODs).getAST(type).setAST( {type: RuntimeType.type, T: {type: RuntimeType.POD, name: type.ast}} )],
         [null, parseStructType]
     ]);
@@ -753,7 +757,12 @@ const parseFunction = (parser) => {
     let functionName = "";
     return parser.thenParse(parseType).getAST(returnType)
           .choose([
-            [["operator"], (_parser) => _parser.parseKeywords(["operator"]).parseSign([])],
+            [["operator"], (_parser) => _parser.parseKeywords(["operator"]).parseSign([]).thenParse((_parser) => {
+                if(_parser.ast.content == '[') {
+                    _parser.jumpSign([']']);
+                }
+                return _parser;
+            })],
             [null, (_parser) => _parser.parseIdentify([])],
           ])
           .getAST(functioinNameObj)

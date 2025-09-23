@@ -354,18 +354,12 @@ async function Test(code, expect, input) {
         const {output} = await runtime.launch(input, {
             debug: false,
             debugCallback: (msg) => {
-                console.info(msg);
-                console.info(msg.currentNode.lineNum);
                 if(msg.currentNode.lineNum < 23) {
                     return;
                 }
                 return new Promise((resolve) => {
                     const onKeyDown = (event) => {
                         if (event.key === 'F9') {
-                            document.removeEventListener('keydown', onKeyDown);
-                            resolve();
-                        }
-                        if (event.key === 'F8') {
                             document.removeEventListener('keydown', onKeyDown);
                             resolve();
                         }

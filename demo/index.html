@@ -106,6 +106,10 @@
       </div>
       <div class="controls">
         <button id="logBtn">Compile</button>
+        <div>
+          <label for="debugMode" style="font-size: 12px; color: var(--muted); user-select: none; cursor: pointer;">Debug Mode</label>
+          <input type="checkbox" id="debugMode"/>
+        </div>
       </div>
     </header>
 
@@ -208,8 +212,31 @@ int main(){
           return;
         }
         runtime = new Cpp4Web.Runtime(AST);
+        const debugMode = document.getElementById('debugMode').checked;
 
-        const {output} = await runtime.launch(inputText, {});
+        let lineNum = 0;
+        const {output} = await runtime.launch(inputText, {debug: debugMode, debugCallback: (msg) => {
+          console.info(msg);
+          console.info("dbg");
+          return new Promise((resolve) => {
+          const onKeyDown = (event) => {
+              if (event.key === 'F9') {
+                const lines = document.getElementsByClassName("line-numbers");
+
+
+                if(lineNum != 0) {
+                  lines[lineNum - 1].style.backgroundColor = "";
+                }
+                lineNum = msg.currentNode.lineNum;
+                lines[lineNum - 1].style.backgroundColor = "rgba(255, 255, 0, 0.2)";
+                stdoutTA.value = msg.output;
+                document.removeEventListener('keydown', onKeyDown);
+                resolve();
+              }
+          };
+          document.addEventListener('keydown', onKeyDown);
+      });
+        }});
 
         stdoutTA.value = output;
         

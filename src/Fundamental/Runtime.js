@@ -59,7 +59,7 @@ class Runtime {
     async setValue(exp1, exp2) {
         let reference = await this.excuteVariable(exp1);
         reference = reference.result;
-        reference.content = exp2;
+        reference._content = exp2;
     }
 
     async binaryOp(exp1, exp2, sign) {
@@ -213,7 +213,7 @@ class Runtime {
                     let output = argument[0];
                     if(output instanceof Pointer) output = output.content;
                     for(let i = 1; i < argument.length; i++) {
-                        output = output.replace('%d', argument[i].content);
+                        output = output.replace('%d', argument[i] instanceof Pointer? argument[i].content: argument[i]);
                     }
 
                     this.output += output;
